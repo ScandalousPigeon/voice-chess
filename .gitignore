@@ -1,0 +1,5 @@
+venv/
+model/
+board.py/
+board.svg/
+__pycache__/
