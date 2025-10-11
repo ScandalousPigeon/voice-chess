@@ -1,62 +1,120 @@
 from vosk import Model, KaldiRecognizer
 import pyaudio
 import json
+import threading
 
-model = Model("model")
-cap = pyaudio.PyAudio()
-
-format_dict = {
-    "queen": "Q",
-    "king": "K",
-    "bishop": "B",
-    "knight": "N",
-    "rook": "R",
+WORD_MAP = {
+    "queen": "Q", "king": "K", "bishop": "B", "knight": "N", "rook": "R",
     "one": "1", "two": "2", "three": "3", "four": "4",
     "five": "5", "six": "6", "seven": "7", "eight": "8",
-    "takes": "x"
+    "takes": "x", "equals": "=",
+    "castle king side": "O-O", "castle queen side": "O-O-O"
 }
 
 # replacing grammar with a list of allowed words to recognise chess notation
 # fixes tested issues; e.g. e4 mistaken for evil
+# add commands to vocab?? e.g. resign, new game, etc.
 letters = ["a", "b", "c", "d", "e", "f", "g", "h"]
 numbers = ["one", "two", "three", "four", "five", "six", "seven", "eight"]
 coords = [f"{letter} {number}" for number in numbers for letter in letters]
 allowed = [
     "king", "queen", "bishop", "knight", "rook",
-    "takes", "castle", "kingside", "queenside",
-    "equals", "to"
+    "takes", "castle", "equals", "to", "side"
 ] + coords
-grammar = json.dumps(allowed)
-recognizer = KaldiRecognizer(model, 16000, grammar)
-recognizer.SetWords(True)
+_GRAMMAR = json.dumps(allowed)
 
-def start_listening():
+def _normalise(raw: str) -> str:
+    """
+    Convert raw recognizer output into SAN.
 
-    stream = cap.open(
-        format=pyaudio.paInt16,
-        channels=1,
-        rate=16000,
-        input=True,
-        frames_per_buffer=8192
-    )
-    stream.start_stream()
+    Examples:
+      - 'castle king side' -> 'O-O'
+      - 'castle queen side' -> 'O-O-O'
+      - 'e four' -> 'e4'
+      - promotions: 'e eight equals queen' -> 'e8=Q'
+      - basic piece letters: 'knight f three' -> 'Nf3'
+    """
+    if not raw:
+        return ""
+    # draw offer or resigning??
+    parsed_string = ""
+    if raw == "castle king side":
+        return "O-O"
+    if raw == "castle queen side":
+        return "O-O-O"
+    for word in raw.split():
+        if word in WORD_MAP:
+            parsed_string += WORD_MAP[word]
+        else:
+            parsed_string += word
+    return parsed_string
 
-    while True:
-        data = stream.read(4096)
-        
-        if recognizer.AcceptWaveform(data):
-            result = json.loads(recognizer.Result())
-            text = result.get("text", "")
+class VoiceListener:
+    """
+    Class that listens to voice input and passes it off to something else.
 
-            # add logic for castling
+    "Something else" being the on_text parameter. This should be a function that decides what to do with the output.
+    """
 
-            parsed_string = ""
-            for word in text.split():
-                if word in format_dict:
-                    parsed_string += format_dict[word]
-                else:
-                    parsed_string += word
-            print(parsed_string)
+    def __init__(self, on_text):
+        self._on_text = on_text
+        self._model = Model("model")
+        self._recognizer = KaldiRecognizer(self._model, 16000, _GRAMMAR)
+        self._recognizer.SetWords(True)
+
+        self._pa = pyaudio.PyAudio()
+        self._stream = None
+        self._th = None
+        self._stop = threading.Event()
+
+    def start(self):
+        """
+        Method to start the listening thread.
+        """
+        if self._th and self._th.is_alive():
+            return
+
+        self._stop.clear()
+        self._stream = self._pa.open(
+            format=pyaudio.paInt16,
+            channels=1,
+            rate=16000,
+            input=True,
+            frames_per_buffer=8192,
+        )
+        self._stream.start_stream()
+        self._th = threading.Thread(target=self._run, daemon=True)
+        self._th.start()
+
+    def stop(self):
+        """Method that closes the thread"""
+        self._stop.set()
+        if self._stream is not None:
+            self._stream.stop_stream()
+            self._stream.close()
+            self._stream = None
+
+    def _run(self):
+        """Helper function for start()"""
+        while not self._stop.is_set():
+            data = self._stream.read(4096, exception_on_overflow=False)
+            if self._recognizer.AcceptWaveform(data):
+                result = json.loads(self._recognizer.Result())
+                text = result.get("text", "")
+                self._on_text(_normalise(text))
+        self._pa.terminate()
 
 if __name__ == "__main__":
-    start_listening()
+
+    def testing(text):
+        print(text)
+
+    listener = VoiceListener(testing)
+
+    try:
+        listener.start()
+        while True:
+            pass
+    except KeyboardInterrupt:
+        print("stopping")
+        listener.stop()

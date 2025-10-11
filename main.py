@@ -3,9 +3,9 @@ import customtkinter as ctk
 from PIL import Image, ImageTk
 import chess, chess.svg
 import cairosvg
-from vosk import Model, KaldiRecognizer
-import pyaudio
-import json
+import voice
+import chess_clock
+import threading
 
 # ---------- helpers ----------
 def board_svg_to_pil(board: chess.Board, size: int = 480) -> Image.Image:
@@ -26,6 +26,7 @@ def board_svg_to_pil(board: chess.Board, size: int = 480) -> Image.Image:
 class VoiceChessApp(ctk.CTk):
     """GUI for our app.
        Includes a functioning board.
+       Note: we strictly use SAN.
     """
     
     def __init__(self):
@@ -90,8 +91,10 @@ class VoiceChessApp(ctk.CTk):
     def set_status(self, text: str):
         self.status.configure(text=text)
 
-    def make_move(self):
-        san = self.move_entry.get().strip()
+    def make_move(self, san):
+        # add an argument here, connect from toggle_mic
+        # following line is for manual (typed) input
+        # san = self.move_entry.get().strip()
         if not san:
             return
         try:
@@ -118,12 +121,14 @@ class VoiceChessApp(ctk.CTk):
 
     def toggle_mic(self):
         self.mic_on = not self.mic_on
+        listener = voice.VoiceListener(self.make_move)
         if self.mic_on:
             self.mic_btn.configure(text="Stop Listening")
+            listener.start()
             self.set_status("Listening...")
-            # add speech recognition here later
         else:
             self.mic_btn.configure(text="Start Listening")
+            listener.stop()
             self.set_status("Mic stopped.")
 
 if __name__ == "__main__":
