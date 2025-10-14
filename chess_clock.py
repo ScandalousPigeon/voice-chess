@@ -1,66 +1,138 @@
+# chess_clock.py
 import time
 
 class ChessClock:
-    """ChessClock object that represents one side; white or black."""
-    def __init__(self, white_time=180, black_time=180, increment=2):
-        """
-        Parameters:
-            white_time (int): how many seconds white has remaining.
-            black_time (int): how many seconds black has remaining.
-            increment (int): how many seconds should be added on each move.
-            ticking (string): which side's timer is running.
-            to_move (string): stores which side's move it should be, on the event of self.pause().
-        """
+    """
+    Non-blocking chess clock driven by a Tk widget's .after().
+    Pass a Tk/CTk widget as `scheduler_root` so we can call .after() / .after_cancel().
+    """
+
+    def __init__(self, scheduler_root, white_time=180, black_time=180, increment=2,
+                 on_tick=None, on_switch=None, on_flag=None):
+        self.root = scheduler_root
+        self.white_time = white_time
+        self.black_time = black_time
+        self.increment = increment
+
+        self.ticking = None  # "white" | "black" | None
+        self.to_move = "white"
+
+        self._after_id = None
+        self._last_tick_monotonic = None  # for drift correction
+
+        # Callbacks (optional)
+        self.on_tick = on_tick or (lambda colour, secs: None)
+        self.on_switch = on_switch or (lambda colour: None)
+        self.on_flag = on_flag or (lambda colour: None)
+
+    # public API; call these commands when using in main.py
+    def reset(self, white_time=180, black_time=180, increment=2):
+        self.cancel()
         self.white_time = white_time
         self.black_time = black_time
         self.increment = increment
         self.ticking = None
         self.to_move = "white"
+        self.on_tick("white", self.white_time)
+        self.on_tick("black", self.black_time)
 
-    def reset(self):
-        """Resets the clock back to its default 3|2 time control."""
-        self.white_time = 180
-        self.black_time = 180
-        self.increment = 2
-        self.ticking = None
-        self.to_move = "white"
-    
     def start_clock(self):
-        """Initial start clock action."""
+        """Start from self.to_move without blocking."""
         self.ticking = self.to_move
-        while self.white_time > 0 and self.ticking == "white":
-            print(f"Time left: {self.white_time} seconds", end="\r")
-            self.white_time -= 1
-            time.sleep(1)            
+        self._last_tick_monotonic = time.perf_counter()
+        self._schedule_next_tick(1000)
 
     def pause(self):
-        """
-        This method pauses the clock for both sides.
-
-        to_move parameter created since self.ticking is set to None and
-        nothing else is keeping track of which side's move it is.
-        """
-        self.to_move = self.ticking
+        """Pause whichever side is ticking and remembers whose move it is."""
+        self.to_move = self.ticking or self.to_move
         self.ticking = None
+        self.cancel()
 
     def press_clock(self):
-        if self.ticking == "white":
-            self.ticking = "black"
-            while self.black_time > 0 and self.ticking == "black":
-                print(f"Time left: {self.black_time} seconds", end="\r")
-                self.black_time -= 1
-                time.sleep(1)
-        elif self.ticking == "black":
-            self.ticking == "white"
-            while self.white_time > 0 and self.ticking == "white":
-                print(f"Time left: {self.white_time} seconds", end="\r")
-                self.white_time -= 1
-                time.sleep(1)
-    
-    def set_clock(self, new_white_time, new_black_time, new_increment):
-        self.new_white_time = new_white_time
-        self.new_black_time = new_black_time
-        self.new_increment = new_increment
+        """
+    Press the clock: add increment to the side that just moved and switch sides.
+    Works whether the clock is running or paused/not-started.
+    """
+        # Case 1: paused or never started yet
+        if self.ticking is None:
+            mover = self.to_move  # the side that just moved
+            if mover == "white":
+                self.white_time += self.increment
+                self.ticking = "black"
+            else:
+                self.black_time += self.increment
+                self.ticking = "white"
 
-if __name__ == "__main__":
-    pass
+            # reflect active side and start ticking
+            self.on_switch(self.ticking)
+            self._restart_ticks()
+            return
+
+        # Case 2: currently running -> normal switch
+        if self.ticking == "white":
+            self.white_time += self.increment
+            self.ticking = "black"
+        else:
+            self.black_time += self.increment
+            self.ticking = "white"
+
+        self.on_switch(self.ticking)
+        self._restart_ticks()
+
+
+    def set_clock(self, new_white_time, new_black_time, new_increment):
+        """Update the control values (and refresh UI)."""
+        self.white_time = new_white_time
+        self.black_time = new_black_time
+        self.increment = new_increment
+        self.on_tick("white", self.white_time)
+        self.on_tick("black", self.black_time)
+
+    def cancel(self):
+        """Cancel any scheduled tick."""
+        if self._after_id is not None:
+            try:
+                self.root.after_cancel(self._after_id)
+            except Exception:
+                pass
+        self._after_id = None
+
+    # internals
+    def _restart_ticks(self):
+        self.cancel()
+        self._last_tick_monotonic = time.perf_counter()
+        self._schedule_next_tick(1000)
+
+    def _schedule_next_tick(self, delay_ms):
+        self._after_id = self.root.after(delay_ms, self._tick_once)
+
+    def _tick_once(self):
+        """Called by Tk every ~1 second. Never blocks."""
+        if self.ticking is None:
+            self._after_id = None
+            return
+
+        now = time.perf_counter()
+        elapsed = now - (self._last_tick_monotonic or now)
+        self._last_tick_monotonic = now
+
+        # Decrement whichever side is ticking
+        if self.ticking == "white":
+            self.white_time = max(0, self.white_time - int(round(elapsed)))
+            remaining = self.white_time
+        else:
+            self.black_time = max(0, self.black_time - int(round(elapsed)))
+            remaining = self.black_time
+
+        # Emit tick update
+        self.on_tick(self.ticking, remaining)
+
+        # Flag check
+        if remaining <= 0:
+            flagged = self.ticking
+            self.ticking = None
+            self.cancel()
+            self.on_flag(flagged)
+            return
+
+        self._schedule_next_tick(1000)
