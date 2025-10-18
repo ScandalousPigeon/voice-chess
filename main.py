@@ -43,6 +43,7 @@ class VoiceChessApp(ctk.CTk):
 
         # model
         self.board = chess.Board()
+        self.listener = voice.VoiceListener(self.make_move)
 
         # layout: left = board+clocks, right = controls
         self.grid_columnconfigure(0, weight=0)
@@ -155,14 +156,13 @@ class VoiceChessApp(ctk.CTk):
 
     def toggle_mic(self):
         self.mic_on = not self.mic_on
-        listener = voice.VoiceListener(self.make_move)
         if self.mic_on:
             self.mic_btn.configure(text="Stop Listening")
-            listener.start()
+            self.listener.start()
             self.set_status("Listening...")
         else:
             self.mic_btn.configure(text="Start Listening")
-            listener.stop()
+            self.listener.stop()
             self.set_status("Mic stopped.")
 
     # clock callbacks
