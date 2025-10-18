@@ -173,7 +173,6 @@ class VoiceChessApp(ctk.CTk):
             self.black_clock_label.configure(text=f"Black: {fmt_time(remaining_secs)}")
 
     def on_switch(self, color):
-        # Optional: reflect active side in the window title or status
         self.set_status(f"Clock: {color.capitalize()} to move")
 
     def on_flag(self, color):

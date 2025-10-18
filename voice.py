@@ -54,6 +54,15 @@ class VoiceListener:
     Class that listens to voice input and passes it off to something else.
 
     "Something else" being the on_text parameter. This should be a function that decides what to do with the output.
+
+    Fields:
+        on_text (function): the callback function to which the input is passed.
+        model:              loads the voice recognition model from file path.
+        recognizer:         loads the recognizer.
+        pa:                 loads pyaudio, which is responsible for communicating with the microphone.
+        stream:             placeholder for when the microphone starts streaming.
+        th:                 placeholder for when the thread is started (threading is needed to avoid interfering with GUI).
+        stop:               placeholder for stopping the thread.
     """
 
     def __init__(self, on_text):
@@ -87,34 +96,43 @@ class VoiceListener:
         self._th.start()
 
     def stop(self):
-        """Method that closes the thread"""
+        """Request the listener thread to stop and wait for it to finish."""
         self._stop.set()
-        if self._stream is not None:
-            self._stream.stop_stream()
-            self._stream.close()
-            self._stream = None
+        if self._th and self._th.is_alive():
+            self._th.join(timeout=1.0)
+        self._th = None
 
     def _run(self):
-        """Helper function for start()"""
-        while not self._stop.is_set():
-            data = self._stream.read(4096, exception_on_overflow=False)
-            if self._recognizer.AcceptWaveform(data):
-                result = json.loads(self._recognizer.Result())
-                text = result.get("text", "")
-                self._on_text(_normalise(text))
-        self._pa.terminate()
+        try:
+            while not self._stop.is_set():
+                data = self._stream.read(4096, exception_on_overflow=False)
+                if self._recognizer.AcceptWaveform(data):
+                    result = json.loads(self._recognizer.Result())
+                    text = result.get("text", "")
+                    self._on_text(_normalise(text))
+        finally:
+            # safely close the audio stream here
+            if self._stream is not None:
+                self._stream.stop_stream()
+                self._stream.close()
+                self._stream = None
 
 if __name__ == "__main__":
+    import time
 
-    def testing(text):
-        print(text)
+    def on_text_received(text):
+        print(f"Recognised: {text}")
 
-    listener = VoiceListener(testing)
+    listener = VoiceListener(on_text_received)
+
+    print("Starting listener... Speak into the microphone.")
+    listener.start()
 
     try:
-        listener.start()
-        while True:
-            pass
+        time.sleep(20)
     except KeyboardInterrupt:
-        print("stopping")
+        print("\nKeyboardInterrupt detected — stopping listener.")
+    finally:
         listener.stop()
+        print("Listener stopped cleanly.")
+    
