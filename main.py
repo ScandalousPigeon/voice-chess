@@ -47,7 +47,6 @@ class VoiceChessApp(ctk.CTk):
         # Left sidebar
         self.left_bar = ctk.CTkFrame(self, width=96)
         self.left_bar.grid(row=1, column=0, sticky="nsw", padx=(self.pad, 2), pady=2)
-        self.left_bar.grid_propagate(False)  # respect width
         self.left_bar.grid_rowconfigure((10,), weight=1)
 
         self.status = ctk.CTkLabel(self.left_bar, text="Ready", anchor="w", wraplength=88, justify="left")
@@ -73,7 +72,6 @@ class VoiceChessApp(ctk.CTk):
         # Right sidebar
         self.right_bar = ctk.CTkFrame(self, width=96)
         self.right_bar.grid(row=1, column=2, sticky="nse", padx=(2, self.pad), pady=2)
-        self.right_bar.grid_propagate(False)
 
         self.mic_on = False
         self.mic_btn = ctk.CTkButton(self.right_bar, text="Start\nListening", height=60,
