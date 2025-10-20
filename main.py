@@ -27,7 +27,14 @@ class VoiceChessApp(ctk.CTk):
     def __init__(self):
         super().__init__()
         self.title("Voice Chess")
-        self.geometry(f"{TARGET_W}x{TARGET_H}")
+        # --- Force landscape fullscreen ---
+        screen_w = self.winfo_screenwidth()
+        screen_h = self.winfo_screenheight()
+        if screen_w < screen_h:
+            screen_w, screen_h = screen_h, screen_w  # swap if portrait
+        self.geometry(f"{screen_w}x{screen_h}+0+0")
+        self.attributes("-fullscreen", True)
+
         ctk.set_appearance_mode("dark")
         ctk.set_default_color_theme("blue")
 
