@@ -5,11 +5,9 @@ import chess, chess.svg
 import cairosvg
 import voice
 import chess_clock
-import threading
 
-# ---------- helpers ----------
+# helpers
 def board_svg_to_pil(board: chess.Board, size: int = 480) -> Image.Image:
-    """Converts SVG images to a format that tkinter can display."""
     svg = chess.svg.board(board, size=size)
     png_bytes = cairosvg.svg2png(bytestring=svg)
     return Image.open(io.BytesIO(png_bytes))
@@ -19,22 +17,14 @@ def fmt_time(secs: int) -> str:
     m, s = divmod(secs, 60)
     return f"{m}:{s:02d}"
 
-TARGET_W, TARGET_H = 480, 320  # 3.5" landscape
+TARGET_W, TARGET_H = 480, 320  # to fit the 3.5 inch screen
 
 class VoiceChessApp(ctk.CTk):
-    """GUI for our app. Includes a functioning board. We use SAN."""
-    
+    """Board centered, clocks top & bottom, buttons on left/right sidebars."""
     def __init__(self):
         super().__init__()
         self.title("Voice Chess")
-        # --- Force landscape fullscreen ---
-        screen_w = self.winfo_screenwidth()
-        screen_h = self.winfo_screenheight()
-        if screen_w < screen_h:
-            screen_w, screen_h = screen_h, screen_w  # swap if portrait
-        self.geometry(f"{screen_w}x{screen_h}+0+0")
-        self.attributes("-fullscreen", True)
-
+        self.geometry(f"{TARGET_W}x{TARGET_H}")
         ctk.set_appearance_mode("dark")
         ctk.set_default_color_theme("blue")
 
@@ -42,119 +32,120 @@ class VoiceChessApp(ctk.CTk):
         self.board = chess.Board()
         self.listener = voice.VoiceListener(self.make_move)
 
-        # ---------- layout: single column ----------
-        # [0] Black clock (top bar)
-        # [1] Board (square, auto-resizes)
-        # [2] White clock (bottom bar)
-        # [3] Controls (buttons + entry)
-        self.grid_columnconfigure(0, weight=1)
-        self.grid_rowconfigure(1, weight=1)  # board expands
+        # Grid: 3 cols (L sidebar | board, clock | R sidebar)
+        self.pad = 6
+        self.grid_columnconfigure(0, weight=0)   # left sidebar
+        self.grid_columnconfigure(1, weight=1)   # center board
+        self.grid_columnconfigure(2, weight=0)   # right sidebar
+        self.grid_rowconfigure(1, weight=1)      # middle grows
 
-        pad = 8
-
-        # ---- clocks + board area ----
+        # Top clock (full width)
         self.black_clock_label = ctk.CTkLabel(self, text="Black: 3:00", font=("Default", 16))
-        self.black_clock_label.grid(row=0, column=0, padx=pad, pady=(pad, 0), sticky="ew")
+        self.black_clock_label.grid(row=0, column=0, columnspan=3,
+                                    padx=self.pad, pady=(self.pad, 2), sticky="ew")
 
-        # Board container: keep a label that we redraw with a scaled image
-        self.board_label = ctk.CTkLabel(self, text="")
-        self.board_label.grid(row=1, column=0, padx=pad, pady=4, sticky="n")
-        self._tk_img = None  # keep reference to avoid GC
+        # Left sidebar
+        self.left_bar = ctk.CTkFrame(self, width=96)
+        self.left_bar.grid(row=1, column=0, sticky="nsw", padx=(self.pad, 2), pady=2)
+        self.left_bar.grid_propagate(False)  # respect width
+        self.left_bar.grid_rowconfigure((10,), weight=1)
 
-        self.white_clock_label = ctk.CTkLabel(self, text="White: 3:00", font=("Default", 16))
-        self.white_clock_label.grid(row=2, column=0, padx=pad, pady=(0, 4), sticky="ew")
+        self.status = ctk.CTkLabel(self.left_bar, text="Ready", anchor="w", wraplength=88, justify="left")
+        self.status.grid(row=0, column=0, sticky="ew", padx=6, pady=(6, 4))
 
-        # ---- control panel (now below the board) ----
-        panel = ctk.CTkFrame(self)
-        panel.grid(row=3, column=0, sticky="ew", padx=pad, pady=(0, pad))
-        panel.grid_columnconfigure(0, weight=1)
-
-        self.status = ctk.CTkLabel(panel, text="Ready", anchor="w")
-        self.status.grid(row=0, column=0, sticky="ew", padx=12, pady=(12, 6))
-
-        # move entry
-        self.move_entry = ctk.CTkEntry(panel, placeholder_text="Enter move (SAN), e.g. e4, Nf3, O-O")
-        self.move_entry.grid(row=1, column=0, sticky="ew", padx=12)
+        self.move_entry = ctk.CTkEntry(self.left_bar, placeholder_text="e.g. e4")
+        self.move_entry.grid(row=1, column=0, sticky="ew", padx=6, pady=(0, 6))
         self.move_entry.bind("<Return>", lambda e: self.make_move(self.move_entry.get().strip()))
 
-        # buttons row
-        btn_row = ctk.CTkFrame(panel)
-        btn_row.grid(row=2, column=0, sticky="ew", padx=12, pady=8)
-        btn_row.grid_columnconfigure((0,1,2), weight=1)
+        self.btn_play = ctk.CTkButton(self.left_bar, text="Play",  height=36,
+                                      command=lambda: self.make_move(self.move_entry.get().strip()))
+        self.btn_undo = ctk.CTkButton(self.left_bar, text="Undo",  height=36, command=self.undo)
+        self.btn_new  = ctk.CTkButton(self.left_bar, text="New",   height=36, command=self.new_game)
+        self.btn_play.grid(row=2, column=0, sticky="ew", padx=6, pady=(0,4))
+        self.btn_undo.grid(row=3, column=0, sticky="ew", padx=6, pady=(0,4))
+        self.btn_new.grid (row=4, column=0, sticky="ew", padx=6, pady=(0,4))
 
-        ctk.CTkButton(btn_row, text="Play",  height=40,
-                      command=lambda: self.make_move(self.move_entry.get().strip())).grid(row=0, column=0, padx=4, sticky="ew")
-        ctk.CTkButton(btn_row, text="Undo",  height=40,
-                      command=self.undo).grid(row=0, column=1, padx=4, sticky="ew")
-        ctk.CTkButton(btn_row, text="New",   height=40,
-                      command=self.new_game).grid(row=0, column=2, padx=4, sticky="ew")
+        # Center board
+        self.board_label = ctk.CTkLabel(self, text="")
+        self.board_label.grid(row=1, column=1, padx=2, pady=2, sticky="n")
+        self._tk_img = None  # keep reference
 
-        # mic toggle
+        # Right sidebar
+        self.right_bar = ctk.CTkFrame(self, width=96)
+        self.right_bar.grid(row=1, column=2, sticky="nse", padx=(2, self.pad), pady=2)
+        self.right_bar.grid_propagate(False)
+
         self.mic_on = False
-        self.mic_btn = ctk.CTkButton(panel, text="Start Listening", height=40, command=self.toggle_mic)
-        self.mic_btn.grid(row=3, column=0, sticky="ew", padx=12, pady=(0, 8))
+        self.mic_btn = ctk.CTkButton(self.right_bar, text="Start\nListening", height=60,
+                                     command=self.toggle_mic)
+        self.mic_btn.grid(row=0, column=0, sticky="new", padx=6, pady=(6,4))
 
-        self.hint = ctk.CTkLabel(
-            panel,
-            text="Tip: SAN moves like e4, Nf3, O-O. Use the button or press Enter.",
-            wraplength=TARGET_W - 2*pad, justify="left")
-        self.hint.grid(row=4, column=0, sticky="ew", padx=12, pady=(0, 12))
+        self.hint = ctk.CTkLabel(self.right_bar,
+            text="Tip:\nSAN like e4,\nNf3, O-O", justify="left", wraplength=88)
+        self.hint.grid(row=1, column=0, sticky="new", padx=6, pady=(0,6))
 
-        # ---- Chess clock wiring ----
+        # Bottom clock (full width)
+        self.white_clock_label = ctk.CTkLabel(self, text="White: 3:00", font=("Default", 16))
+        self.white_clock_label.grid(row=2, column=0, columnspan=3,
+                                    padx=self.pad, pady=(2, self.pad), sticky="ew")
+
+        # Chess clock wiring
         self.clock = chess_clock.ChessClock(
             scheduler_root=self,
-            white_time=180,  # 3 minutes
-            black_time=180,
-            increment=2,
-            on_tick=self.on_tick,
-            on_switch=self.on_switch,
-            on_flag=self.on_flag,
+            white_time=180, black_time=180, increment=2,
+            on_tick=self.on_tick, on_switch=self.on_switch, on_flag=self.on_flag,
         )
         self.on_tick("white", 180)
         self.on_tick("black", 180)
 
-        # Draw the initial board at a size that fits the current window
-        self.refresh_board()  # will compute a fitting board size
-
-        # Recompute board size whenever the window changes (rotation/resize)
+        # Draw initial board and keep it sized correctly
+        self.after(0, self.refresh_board)   # after layout -> real sizes
         self.bind("<Configure>", self._on_resize)
 
-    # ---------- sizing logic ----------
+    # sizing
+    def _measure(self, w):
+        h = w.winfo_height()
+        return h if h > 1 else w.winfo_reqheight()
+    def _measure_w(self, w):
+        ww = w.winfo_width()
+        return ww if ww > 1 else w.winfo_reqwidth()
+
     def _compute_board_size(self) -> int:
-        """Compute the largest square that fits between clocks and above controls."""
-        # Current inner size
-        w = max(1, self.winfo_width())
-        h = max(1, self.winfo_height())
+        self.update_idletasks()
 
-        # Reserve vertical space for: top clock (~36), bottom clock (~36), controls (~120), plus paddings
-        top_clock_h    = 36
-        bottom_clock_h = 36
-        controls_h     = 120  # entry + buttons + mic + hint
-        vertical_margins = 8 + 4 + 4 + 8  # padding around elements
+        total_w = max(1, self.winfo_width())
+        total_h = max(1, self.winfo_height())
 
-        available_h = h - (top_clock_h + bottom_clock_h + controls_h + vertical_margins)
-        available_w = w - 2*8  # side padding
+        # take actual occupied widths/heights
+        left_w  = self._measure_w(self.left_bar)
+        right_w = self._measure_w(self.right_bar)
+        top_h   = self._measure(self.black_clock_label)
+        bot_h   = self._measure(self.white_clock_label)
 
-        size = max(160, min(available_w, available_h))
+        # paddings that flank board area
+        vertical_margins = self.pad + 2 + 2 + self.pad
+        horizontal_margins = 2 + 2  # around the board label within col 1
+
+        avail_w = total_w - (left_w + right_w + horizontal_margins)
+        avail_h = total_h - (top_h + bot_h + vertical_margins)
+
+        size = max(140, min(avail_w, avail_h))  # keep usable minimum
         return int(size)
 
-    # ---------- board display ----------
+    # board render
     def refresh_board(self, forced_size: int | None = None):
         board_size = forced_size if forced_size else self._compute_board_size()
         img = board_svg_to_pil(self.board, size=board_size)
         self._tk_img = ImageTk.PhotoImage(img)
-        self.board_label.configure(image=self._tk_img)
-        # prevent the label from growing past the image
-        self.board_label.configure(width=board_size, height=board_size)
+        self.board_label.configure(image=self._tk_img, width=board_size, height=board_size)
 
-    def _on_resize(self, _event):
-        # Debounce fast resizes by scheduling once; .after_idle is enough here
+    def _on_resize(self, _e):
         self.after_idle(self.refresh_board)
 
+    # status + actions
     def set_status(self, text: str):
         self.status.configure(text=text)
 
-    # ---------- game actions ----------
     def make_move(self, san):
         if not san:
             return
@@ -162,9 +153,9 @@ class VoiceChessApp(ctk.CTk):
             move = self.board.parse_san(san)
             self.board.push(move)
             self.refresh_board()
-            self.set_status(f"Played: {san}   |   Turn: {'White' if self.board.turn else 'Black'}")
+            self.set_status(f"Played: {san} | Turn: {'White' if self.board.turn else 'Black'}")
             self.move_entry.delete(0, "end")
-            self.clock.press_clock()  # switch + increment
+            self.clock.press_clock()
         except Exception as e:
             self.set_status(f"Invalid move: {san} ({e})")
 
@@ -186,15 +177,15 @@ class VoiceChessApp(ctk.CTk):
     def toggle_mic(self):
         self.mic_on = not self.mic_on
         if self.mic_on:
-            self.mic_btn.configure(text="Stop Listening")
+            self.mic_btn.configure(text="Stop\nListening")
             self.listener.start()
             self.set_status("Listening...")
         else:
-            self.mic_btn.configure(text="Start Listening")
+            self.mic_btn.configure(text="Start\nListening")
             self.listener.stop()
             self.set_status("Mic stopped.")
 
-    # ---------- clock callbacks ----------
+    # clock callbacks
     def on_tick(self, color, remaining_secs):
         if color == "white":
             self.white_clock_label.configure(text=f"White: {fmt_time(remaining_secs)}")
@@ -205,7 +196,7 @@ class VoiceChessApp(ctk.CTk):
         self.set_status(f"Clock: {color.capitalize()} to move")
 
     def on_flag(self, color):
-        self.set_status(f"{color.capitalize()} flagged on time!")
+        self.set_status(f"{color.capitalize()} flagged!")
 
 if __name__ == "__main__":
     app = VoiceChessApp()
