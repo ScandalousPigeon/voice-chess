@@ -1,0 +1,6 @@
+CairoSVG==2.8.2
+customtkinter==5.2.2
+pillow==11.3.0
+PyAudio==0.2.14
+python-chess==1.999
+vosk==0.3.45
