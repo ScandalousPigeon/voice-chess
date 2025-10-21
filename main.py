@@ -18,6 +18,9 @@ def fmt_time(secs: int) -> str:
     return f"{m}:{s:02d}"
 
 TARGET_W, TARGET_H = 480, 320  # to fit the 3.5 inch screen
+SIDEBAR_W = 92
+BTN_W = 80
+BTN_H = 34
 
 class VoiceChessApp(ctk.CTk):
     """Board centered, clocks top & bottom, buttons on left/right sidebars."""
@@ -47,6 +50,7 @@ class VoiceChessApp(ctk.CTk):
         # Left sidebar
         self.left_bar = ctk.CTkFrame(self, width=96)
         self.left_bar.grid(row=1, column=0, sticky="nsw", padx=(self.pad, 2), pady=2)
+        self.left_bar.grid_propagate(False) 
         self.left_bar.grid_rowconfigure((10,), weight=1)
 
         self.status = ctk.CTkLabel(self.left_bar, text="Ready", anchor="w", wraplength=88, justify="left")
@@ -72,6 +76,7 @@ class VoiceChessApp(ctk.CTk):
         # Right sidebar
         self.right_bar = ctk.CTkFrame(self, width=96)
         self.right_bar.grid(row=1, column=2, sticky="nse", padx=(2, self.pad), pady=2)
+        self.right_bar.grid_propagate(False)
 
         self.mic_on = False
         self.mic_btn = ctk.CTkButton(self.right_bar, text="Start\nListening", height=60,
