@@ -18,9 +18,11 @@ def fmt_time(secs: int) -> str:
     return f"{m}:{s:02d}"
 
 TARGET_W, TARGET_H = 480, 320  # to fit the 3.5 inch screen
-SIDEBAR_W = 92
-BTN_W = 80
-BTN_H = 34
+SIDEBAR_W   = 112     # wider, comfy bar
+INNER_PAD   = 6       # the padx you use in grid()
+BTN_W       = SIDEBAR_W - 2*INNER_PAD   # fits inside bar
+BTN_H       = 34
+
 
 class VoiceChessApp(ctk.CTk):
     """Board centered, clocks top & bottom, buttons on left/right sidebars."""
@@ -48,25 +50,30 @@ class VoiceChessApp(ctk.CTk):
                                     padx=self.pad, pady=(self.pad, 2), sticky="ew")
 
         # Left sidebar
-        self.left_bar = ctk.CTkFrame(self, width=96)
+        self.left_bar = ctk.CTkFrame(self, width=SIDEBAR_W)
         self.left_bar.grid(row=1, column=0, sticky="nsw", padx=(self.pad, 2), pady=2)
-        self.left_bar.grid_propagate(False) 
-        self.left_bar.grid_rowconfigure((10,), weight=1)
+        self.left_bar.grid_propagate(False)
 
-        self.status = ctk.CTkLabel(self.left_bar, text="Ready", anchor="w", wraplength=88, justify="left")
-        self.status.grid(row=0, column=0, sticky="ew", padx=6, pady=(6, 4))
+        self.status = ctk.CTkLabel(self.left_bar, text="Ready", anchor="w",
+                                wraplength=SIDEBAR_W - 2*INNER_PAD, justify="left")
+        self.status.grid(row=0, column=0, sticky="ew", padx=INNER_PAD, pady=(INNER_PAD, 4))
 
-        self.move_entry = ctk.CTkEntry(self.left_bar, placeholder_text="e.g. e4")
-        self.move_entry.grid(row=1, column=0, sticky="ew", padx=6, pady=(0, 6))
+        self.move_entry = ctk.CTkEntry(self.left_bar, placeholder_text="e.g. e4",
+                                    width=BTN_W)  # keep it inside the bar
+        self.move_entry.grid(row=1, column=0, sticky="w", padx=INNER_PAD, pady=(0, 6))
         self.move_entry.bind("<Return>", lambda e: self.make_move(self.move_entry.get().strip()))
 
-        self.btn_play = ctk.CTkButton(self.left_bar, text="Play",  height=36,
-                                      command=lambda: self.make_move(self.move_entry.get().strip()))
-        self.btn_undo = ctk.CTkButton(self.left_bar, text="Undo",  height=36, command=self.undo)
-        self.btn_new  = ctk.CTkButton(self.left_bar, text="New",   height=36, command=self.new_game)
-        self.btn_play.grid(row=2, column=0, sticky="ew", padx=6, pady=(0,4))
-        self.btn_undo.grid(row=3, column=0, sticky="ew", padx=6, pady=(0,4))
-        self.btn_new.grid (row=4, column=0, sticky="ew", padx=6, pady=(0,4))
+        self.btn_play = ctk.CTkButton(self.left_bar, text="Play", width=BTN_W, height=BTN_H,
+                                    command=lambda: self.make_move(self.move_entry.get().strip()))
+        self.btn_undo = ctk.CTkButton(self.left_bar, text="Undo", width=BTN_W, height=BTN_H,
+                                    command=self.undo)
+        self.btn_new  = ctk.CTkButton(self.left_bar, text="New",  width=BTN_W, height=BTN_H,
+                                    command=self.new_game)
+
+        # NOTE: do NOT use sticky="ew" on the buttons
+        self.btn_play.grid(row=2, column=0, padx=INNER_PAD, pady=(0, 4), sticky="w")
+        self.btn_undo.grid(row=3, column=0, padx=INNER_PAD, pady=(0, 4), sticky="w")
+        self.btn_new.grid (row=4, column=0, padx=INNER_PAD, pady=(0, 4), sticky="w")
 
         # Center board
         self.board_label = ctk.CTkLabel(self, text="")
@@ -74,18 +81,28 @@ class VoiceChessApp(ctk.CTk):
         self._tk_img = None  # keep reference
 
         # Right sidebar
-        self.right_bar = ctk.CTkFrame(self, width=96)
+        self.right_bar = ctk.CTkFrame(self, width=SIDEBAR_W)
         self.right_bar.grid(row=1, column=2, sticky="nse", padx=(2, self.pad), pady=2)
-        self.right_bar.grid_propagate(False)
+        self.right_bar.grid_propagate(False)  # keep exact width
 
         self.mic_on = False
-        self.mic_btn = ctk.CTkButton(self.right_bar, text="Start\nListening", height=60,
-                                     command=self.toggle_mic)
-        self.mic_btn.grid(row=0, column=0, sticky="new", padx=6, pady=(6,4))
+        self.mic_btn = ctk.CTkButton(
+            self.right_bar,
+            text="Start\nListening",
+            width=BTN_W,         # <-- explicitly size the button
+            height=60,
+            command=self.toggle_mic
+        )
+        # don't use sticky="ew", keep it centered or aligned left
+        self.mic_btn.grid(row=0, column=0, padx=INNER_PAD, pady=(INNER_PAD, 4), sticky="w")
 
-        self.hint = ctk.CTkLabel(self.right_bar,
-            text="Tip:\nSAN like e4,\nNf3, O-O", justify="left", wraplength=88)
-        self.hint.grid(row=1, column=0, sticky="new", padx=6, pady=(0,6))
+        self.hint = ctk.CTkLabel(
+            self.right_bar,
+            text="Tip:\nSAN like e4,\nNf3, O-O",
+            justify="left",
+            wraplength=SIDEBAR_W - 2*INNER_PAD
+        )
+        self.hint.grid(row=1, column=0, padx=INNER_PAD, pady=(0, INNER_PAD), sticky="w")
 
         # Bottom clock (full width)
         self.white_clock_label = ctk.CTkLabel(self, text="White: 3:00", font=("Default", 16))
