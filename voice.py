@@ -111,7 +111,6 @@ class VoiceListener:
                     text = result.get("text", "")
                     self._on_text(_normalise(text))
         finally:
-            # safely close the audio stream here
             if self._stream is not None:
                 self._stream.stop_stream()
                 self._stream.close()

@@ -18,9 +18,9 @@ def fmt_time(secs: int) -> str:
     return f"{m}:{s:02d}"
 
 TARGET_W, TARGET_H = 480, 320  # to fit the 3.5 inch screen
-SIDEBAR_W   = 112     # wider, comfy bar
-INNER_PAD   = 6       # the padx you use in grid()
-BTN_W       = SIDEBAR_W - 2*INNER_PAD   # fits inside bar
+SIDEBAR_W   = 112
+INNER_PAD   = 6 
+BTN_W       = SIDEBAR_W - 2*INNER_PAD 
 BTN_H       = 34
 
 
@@ -44,7 +44,7 @@ class VoiceChessApp(ctk.CTk):
         self.grid_columnconfigure(2, weight=0)   # right sidebar
         self.grid_rowconfigure(1, weight=1)      # middle grows
 
-        # Top clock (full width)
+        # Top clock
         self.black_clock_label = ctk.CTkLabel(self, text="Black: 3:00", font=("Default", 16))
         self.black_clock_label.grid(row=0, column=0, columnspan=3,
                                     padx=self.pad, pady=(self.pad, 2), sticky="ew")
@@ -70,7 +70,6 @@ class VoiceChessApp(ctk.CTk):
         self.btn_new  = ctk.CTkButton(self.left_bar, text="New",  width=BTN_W, height=BTN_H,
                                     command=self.new_game)
 
-        # NOTE: do NOT use sticky="ew" on the buttons
         self.btn_play.grid(row=2, column=0, padx=INNER_PAD, pady=(0, 4), sticky="w")
         self.btn_undo.grid(row=3, column=0, padx=INNER_PAD, pady=(0, 4), sticky="w")
         self.btn_new.grid (row=4, column=0, padx=INNER_PAD, pady=(0, 4), sticky="w")
@@ -89,11 +88,10 @@ class VoiceChessApp(ctk.CTk):
         self.mic_btn = ctk.CTkButton(
             self.right_bar,
             text="Start\nListening",
-            width=BTN_W,         # <-- explicitly size the button
+            width=BTN_W,    
             height=60,
             command=self.toggle_mic
         )
-        # don't use sticky="ew", keep it centered or aligned left
         self.mic_btn.grid(row=0, column=0, padx=INNER_PAD, pady=(INNER_PAD, 4), sticky="w")
 
         self.hint = ctk.CTkLabel(
@@ -104,7 +102,7 @@ class VoiceChessApp(ctk.CTk):
         )
         self.hint.grid(row=1, column=0, padx=INNER_PAD, pady=(0, INNER_PAD), sticky="w")
 
-        # Bottom clock (full width)
+        # Bottom clock
         self.white_clock_label = ctk.CTkLabel(self, text="White: 3:00", font=("Default", 16))
         self.white_clock_label.grid(row=2, column=0, columnspan=3,
                                     padx=self.pad, pady=(2, self.pad), sticky="ew")
@@ -118,8 +116,7 @@ class VoiceChessApp(ctk.CTk):
         self.on_tick("white", 180)
         self.on_tick("black", 180)
 
-        # Draw initial board and keep it sized correctly
-        self.after(0, self.refresh_board)   # after layout -> real sizes
+        self.after(0, self.refresh_board)
         self.bind("<Configure>", self._on_resize)
 
     # sizing
@@ -136,20 +133,18 @@ class VoiceChessApp(ctk.CTk):
         total_w = max(1, self.winfo_width())
         total_h = max(1, self.winfo_height())
 
-        # take actual occupied widths/heights
         left_w  = self._measure_w(self.left_bar)
         right_w = self._measure_w(self.right_bar)
         top_h   = self._measure(self.black_clock_label)
         bot_h   = self._measure(self.white_clock_label)
 
-        # paddings that flank board area
         vertical_margins = self.pad + 2 + 2 + self.pad
-        horizontal_margins = 2 + 2  # around the board label within col 1
+        horizontal_margins = 2 + 2 
 
         avail_w = total_w - (left_w + right_w + horizontal_margins)
         avail_h = total_h - (top_h + bot_h + vertical_margins)
 
-        size = max(140, min(avail_w, avail_h))  # keep usable minimum
+        size = max(140, min(avail_w, avail_h)) 
         return int(size)
 
     # board render
